@@ -1,0 +1,35 @@
+name: Flask DayZ Panel
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Rodar testes com pytest
+        run: pytest -v
+
+      - name: Iniciar servidor Flask em background
+        run: |
+          nohup python app.py > server.log 2>&1 &
+          sleep 5
+
+      - name: Testar se servidor responde
+        run: |
+          curl -f http://127.0.0.1:5000 || (cat server.log && exit 1)
