@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Dashboard DayZ{% endblock %}
+{% block content %}
+<h1>Dashboard DayZ - Controle Local</h1>
+
+<div class="grid">
+  <section class="card">
+    <h2>Controles do Servidor</h2>
+    <p class="status"><span class="dot red"></span> Offline</p>
+    <div class="buttons">
+      <button class="btn green" onclick="doAction('start')">Iniciar</button>
+      <button class="btn red"   onclick="doAction('stop')">Parar</button>
+      <button class="btn blue"  onclick="doAction('update')">Atualizar Servidor</button>
+      <button class="btn blue"  onclick="doAction('updatemods')">Atualizar Mods</button>
+      <a class="btn big blue" href="{{ url_for('files') }}">Gerenciar Arquivos</a>
+    </div>
+    <small class="hint">Servidor: {{ server_path }}</small>
+  </section>
+
+  <section id="console" class="card">
+    <h2>Console do Servidor</h2>
+    <pre id="consoleOut" class="console"></pre>
+    <div class="buttons">
+      <button class="btn blue" onclick="startConsole()">Atualizar Console</button>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function doAction(cmd) {
+  try {
+    await fetch(`/action/${cmd}`, { method: 'POST' });
+  } catch(e) { console.error(e); }
+}
+
+let controller;
+async function startConsole() {
+  if (controller) controller.abort();
+  controller = new AbortController();
+  const out = document.getElementById('consoleOut');
+  out.textContent = '';
+  const resp = await fetch('/console-stream', { signal: controller.signal });
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  for(;;){
+    const {value, done} = await reader.read();
+    if (done) break;
+    out.textContent += decoder.decode(value, {stream:true});
+    out.scrollTop = out.scrollHeight;
+  }
+}
+window.addEventListener('DOMContentLoaded', startConsole);
+</script>
+{% endblock %}
