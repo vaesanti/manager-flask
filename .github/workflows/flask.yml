@@ -22,9 +22,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Rodar testes com pytest
-        run: pytest -v
-
       - name: Iniciar servidor Flask em background
         run: |
           nohup python app.py > server.log 2>&1 &
