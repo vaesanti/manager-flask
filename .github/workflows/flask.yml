@@ -1,8 +1,7 @@
 name: Flask DayZ Panel
 
 on:
-  push:
-  pull_request:
+  workflow_dispatch:   # roda manualmente
 
 jobs:
   build:
@@ -21,12 +20,27 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          sudo apt update
+          sudo apt install -y jq
 
-      - name: Iniciar servidor Flask em background
+      - name: Instalar ngrok
+        run: |
+          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | \
+          sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | \
+          sudo tee /etc/apt/sources.list.d/ngrok.list
+          sudo apt update && sudo apt install -y ngrok
+          ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+
+      - name: Iniciar Flask + ngrok
         run: |
           nohup python app.py > server.log 2>&1 &
+          nohup ngrok http 5000 > ngrok.log 2>&1 &
           sleep 5
-    
-      - name: Testar se servidor responde
+          echo "URL Pública do Painel:"
+          curl --silent http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url'
+
+      - name: Manter job ativo por 6h
         run: |
-          curl -f http://127.0.0.1:5000 || (cat server.log && exit 1)
+          echo "Servidor ativo por até 6 horas..."
+          sleep 21600   # 6 horas em segundos
