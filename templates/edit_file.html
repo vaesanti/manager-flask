@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Editar Arquivo{% endblock %}
+{% block content %}
+<h1>Editando: <code>{{ filename }}</code></h1>
+
+<div class="card">
+  <form method="POST">
+    <textarea name="content" class="editor" spellcheck="false">{{ content }}</textarea>
+    <div class="buttons">
+      <button type="submit" class="btn green">Salvar</button>
+      <a href="{{ url_for('files') }}" class="btn blue">Voltar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
