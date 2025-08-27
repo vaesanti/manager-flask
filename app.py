@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, redirect, session
+from flask import Flask, request, redirect, session
 import subprocess
 import os
 
@@ -7,7 +7,7 @@ app.secret_key = 'secret'
 
 SERVER_PATH = "/home/dayz/servers/teste"
 USERNAME = "2302"
-PASSWORD = "12345"
+PASSWORD = "@12345"
 FILES = {
     'server.cfg': f'{SERVER_PATH}/serverDZ.cfg',
     'basic.cfg': f'{SERVER_PATH}/basic.cfg', 
@@ -20,23 +20,23 @@ def status():
 
 def run(cmd):
     try:
-        result = subprocess.run([f'./{cmd}.sh'], cwd=SERVER_PATH, capture_output=True, text=True, timeout=30)
-        return {'ok': True, 'out': result.stdout}
-    except Exception as e: return {'ok': False, 'err': str(e)}
+        subprocess.run([f'./{cmd}.sh'], cwd=SERVER_PATH, timeout=30)
+    except: pass
 
-def log():
-    try: return subprocess.run(['tail', '-n', '20', f'{SERVER_PATH}/server_console.log'], capture_output=True, text=True).stdout
-    except: return 'Erro log'
+def get_log():
+    try: return subprocess.run(['tail', '-n', '50', f'{SERVER_PATH}/server_console.log'], capture_output=True, text=True).stdout
+    except: return 'Erro ao ler log'
 
 @app.route('/')
 def index():
     if not session.get('login'): return '''
     <form method=post action=/login>
-    User:<input name=u><br>
-    Pass:<input type=password name=p><br>
-    <button>Login</button></form>
+    User:<input name=u>
+    Pass:<input type=password name=p>
+    <button>Login</button>
     '''
     
+    log_content = get_log()
     return f'''
     <h3>Server: {"ON" if status() else "OFF"} | Players: 0/60</h3>
     <form method=post action=/cmd>
@@ -44,9 +44,10 @@ def index():
     <button name=c value=stop>Stop</button>
     <button name=c value=update>Update</button>
     </form>
-    <pre>{log()}</pre>
+    <h4>Console:</h4>
+    <pre style="background:#000;color:#0f0;padding:10px;height:300px;overflow:auto">{log_content}</pre>
     <a href=/files>Files</a> | <a href=/logout>Logout</a>
-    <script>setTimeout(()=>location.reload(),5000)</script>
+    <script>setTimeout(()=>location.reload(),2000)</script>
     '''
 
 @app.route('/login', methods=['POST'])
@@ -62,7 +63,7 @@ def logout():
 
 @app.route('/cmd', methods=['POST'])
 def cmd():
-    result = run(request.form.get('c'))
+    run(request.form.get('c'))
     return redirect('/')
 
 @app.route('/files')
