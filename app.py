@@ -1,132 +1,173 @@
-import os
+from flask import Flask, request, jsonify, redirect, session, render_template_string
 import subprocess
-from pathlib import Path
-from flask import (
-    Flask, render_template, request, redirect,
-    url_for, Response, abort, flash
-)
+import os
+import threading
+from functools import wraps
 
 app = Flask(__name__)
-app.secret_key = "change-me"
+app.config['SECRET_KEY'] = 'secret'
+socketio = None  # Removido SocketIO para simplificar
 
-# Caminhos principais
-SERVER_PATH = Path("/home/dayz/servers/2302")
-
-# Scripts do servidor (ajuste se os nomes forem diferentes)
-SCRIPTS = {
-    "start": SERVER_PATH / "start.sh",
-    "stop": SERVER_PATH / "stop.sh",
-    "update": SERVER_PATH / "update.sh",
-    "updatemods": SERVER_PATH / "update_mods.sh",
-    "console": SERVER_PATH / "console.sh",
+# Configurações
+SERVER_PATH = "/home/dayz/servers/teste"
+LOGIN_USERNAME = "2302"
+LOGIN_PASSWORD = "xM@n2012x"
+EDITABLE_FILES = {
+    "server.cfg": f"{SERVER_PATH}/serverDZ.cfg",
+    "basic.cfg": f"{SERVER_PATH}/basic.cfg",
+    "types.xml": f"{SERVER_PATH}/mpmissions/dayzOffline.chernarusplus/db/types.xml"
 }
 
-# Raízes que podem ser gerenciadas no painel (pastas/arquivos permitidos)
-MANAGED_ROOTS = [
-    SERVER_PATH / "mpmissions",
-    SERVER_PATH / "serverDZ.cfg",
-    SERVER_PATH / "profiles",            # opcional (logs/configs)
-    SERVER_PATH / "mods",                # opcional
-]
+# Templates mínimos
+LOGIN_TEMPLATE = '''
+<form method=post onsubmit="login(event)">
+    <h3>Login</h3>
+    <input name=username placeholder=Usuário required>
+    <input type=password name=password placeholder=Senha required>
+    <button>Entrar</button>
+    <div id=error style=color:red></div>
+</form>
+<script>
+async function login(e) {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const response = await fetch('/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username: formData.get('username'), password: formData.get('password')})
+    });
+    const result = await response.json();
+    if (result.success) window.location.href = '/';
+    else document.getElementById('error').textContent = result.error;
+}
+</script>
+'''
 
-# ---------- util ----------
+DASHBOARD_TEMPLATE = '''
+<h3>Servidor DayZ</h3>
+<div>Status: {{ "ONLINE" if online else "OFFLINE" }} | Jogadores: 0/60</div>
+<div>
+    <button onclick="action('start')">Iniciar</button>
+    <button onclick="action('stop')">Parar</button>
+    <button onclick="action('update')">Atualizar</button>
+    <button onclick="location.href='/files'">Arquivos</button>
+</div>
+<div id=status></div>
+<pre id=log style=height:200px;overflow:auto;background:#000;color:#0f0></pre>
+<script>
+function action(cmd) {
+    fetch('/' + cmd + '_server', {method: 'POST'})
+    .then(r => r.json())
+    .then(data => document.getElementById('status').textContent = data.success ? 'Sucesso' : 'Erro: ' + data.error);
+}
+setInterval(() => fetch('/log').then(r => r.text()).then(t => document.getElementById('log').textContent = t), 1000);
+</script>
+<a href=/logout>Sair</a>
+'''
 
-def is_allowed_path(p: Path) -> bool:
-    """Garante que p esteja dentro de alguma raiz permitida (sem path traversal)."""
-    p = p.resolve()
-    for root in MANAGED_ROOTS:
-        try:
-            if p.is_relative_to(root.resolve()):
-                return True
-        except AttributeError:
-            # Py<3.9 compat
-            if str(p).startswith(str(root.resolve())):
-                return True
-    return p in [r.resolve() for r in MANAGED_ROOTS]
+FILES_TEMPLATE = '''
+<h3>Arquivos</h3>
+{% for name, path in files.items() %}
+<div><a href=/edit/{{ name }}>{{ name }}</a></div>
+{% endfor %}
+<a href=/>Voltar</a>
+'''
 
-def build_tree(path: Path):
-    """Retorna uma árvore simples para renderização."""
-    path = path.resolve()
-    node = {"name": path.name or str(path), "path": str(path), "type": "dir", "children": []}
+EDIT_TEMPLATE = '''
+<h3>Editando {{ name }}</h3>
+<textarea style="width:100%;height:300px" name=content>{{ content }}</textarea>
+<br>
+<button onclick="save()">Salvar</button>
+<a href=/files>Voltar</a>
+<script>
+function save() {
+    const formData = new FormData();
+    formData.append('path', '{{ path }}');
+    formData.append('content', document.querySelector('textarea').value);
+    fetch('/save', {method: 'POST', body: formData})
+    .then(r => r.json())
+    .then(data => alert(data.success ? 'Salvo' : 'Erro: ' + data.error));
+}
+</script>
+'''
+
+# Funções auxiliares
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('logged_in'): return redirect('/login')
+        return f(*args, **kwargs)
+    return decorated
+
+def get_status():
+    try: return subprocess.run(['pgrep', '-f', 'DayZServer'], capture_output=True).returncode == 0
+    except: return False
+
+def run_cmd(cmd):
     try:
-        for entry in sorted(path.iterdir(), key=lambda e: (e.is_file(), e.name.lower())):
-            if entry.is_dir():
-                node["children"].append(build_tree(entry))
-            else:
-                node["children"].append({"name": entry.name, "path": str(entry.resolve()), "type": "file"})
-    except PermissionError:
-        pass
-    return node
+        result = subprocess.run([f"./{cmd}.sh"], cwd=SERVER_PATH, capture_output=True, text=True, timeout=30)
+        return {"success": True, "output": result.stdout, "error": result.stderr}
+    except Exception as e: return {"success": False, "error": str(e)}
 
-def run_background(script_path: Path):
-    subprocess.Popen(["bash", str(script_path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+def read_log():
+    try: return subprocess.run(['tail', '-n', '50', f"{SERVER_PATH}/server_console.log"], capture_output=True, text=True).stdout
+    except: return "Erro ao ler log"
 
-# ---------- rotas ----------
+# Rotas
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'GET': return render_template_string(LOGIN_TEMPLATE)
+    data = request.get_json()
+    if data.get('username') == LOGIN_USERNAME and data.get('password') == LOGIN_PASSWORD:
+        session['logged_in'] = True
+        return jsonify({"success": True})
+    return jsonify({"success": False, "error": "Credenciais inválidas"})
 
-@app.route("/")
-def index():
-    return render_template("index.html", server_path=str(SERVER_PATH))
+@app.route('/logout')
+def logout(): session.clear(); return redirect('/login')
 
-@app.route("/action/<cmd>", methods=["POST"])
-def action(cmd):
-    if cmd not in SCRIPTS:
-        abort(404)
-    run_background(SCRIPTS[cmd])
-    return ("", 204)
+@app.route('/')
+@login_required
+def dashboard(): return render_template_string(DASHBOARD_TEMPLATE, online=get_status())
 
-@app.route("/files")
-def files():
-    trees = []
-    for root in MANAGED_ROOTS:
-        if root.exists():
-            trees.append(build_tree(root))
-    return render_template("files.html", trees=trees)
+@app.route('/start_server', methods=['POST'])
+@login_required
+def start_server(): return jsonify(run_cmd('start'))
 
-@app.route("/edit")
-def edit_redirect():
-    return redirect(url_for("files"))
+@app.route('/stop_server', methods=['POST'])
+@login_required
+def stop_server(): return jsonify(run_cmd('stopServer'))
 
-@app.route("/edit/<path:file_path>", methods=["GET", "POST"])
-def edit_file(file_path):
-    p = Path("/" + file_path).resolve()  # força absoluto
-    if not is_allowed_path(p) or not p.exists() or p.is_dir():
-        abort(404)
+@app.route('/update_server', methods=['POST'])
+@login_required
+def update_server(): return jsonify(run_cmd('update'))
 
-    if request.method == "POST":
-        content = request.form.get("content", "")
-        try:
-            p.write_text(content, encoding="utf-8")
-            flash("Arquivo salvo com sucesso.", "ok")
-        except Exception as e:
-            flash(f"Erro ao salvar: {e}", "err")
-        return redirect(url_for("edit_file", file_path=str(p)[1:]))
+@app.route('/log')
+@login_required
+def get_log(): return read_log()
 
+@app.route('/files')
+@login_required
+def files(): return render_template_string(FILES_TEMPLATE, files=EDITABLE_FILES)
+
+@app.route('/edit/<name>')
+@login_required
+def edit(name):
+    if name not in EDITABLE_FILES: return redirect('/files')
+    path = EDITABLE_FILES[name]
+    try: content = open(path, 'r').read()
+    except: content = "Erro ao ler arquivo"
+    return render_template_string(EDIT_TEMPLATE, name=name, path=path, content=content)
+
+@app.route('/save', methods=['POST'])
+@login_required
+def save():
+    path, content = request.form.get('path'), request.form.get('content')
+    if path not in EDITABLE_FILES.values(): return jsonify({"success": False, "error": "Acesso negado"})
     try:
-        content = p.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        content = p.read_bytes().decode("latin-1", errors="replace")
-    return render_template("edit_file.html", filename=str(p), content=content)
+        with open(path, 'w') as f: f.write(content)
+        return jsonify({"success": True})
+    except Exception as e: return jsonify({"success": False, "error": str(e)})
 
-@app.route("/console-stream")
-def console_stream():
-    # Executa o script de console e transmite stdout em tempo real
-    if not SCRIPTS["console"].exists():
-        return Response("Console script não encontrado.\n", mimetype="text/plain")
-    def generate():
-        proc = subprocess.Popen(
-            ["bash", str(SCRIPTS["console"])],
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1
-        )
-        try:
-            for line in proc.stdout:
-                yield line
-        finally:
-            try:
-                proc.terminate()
-            except Exception:
-                pass
-    return Response(generate(), mimetype="text/plain")
-
-if __name__ == "__main__":
-    # debug=True opcional; em produção use um WSGI (gunicorn) por trás de um reverse proxy.
-    app.run(host="0.0.0.0", port=5000, debug=True)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
