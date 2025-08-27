@@ -24,20 +24,25 @@ def run(cmd):
     except: pass
 
 def get_log():
-    try: return subprocess.run(['tail', '-n', '50', f'{SERVER_PATH}/server_console.log'], capture_output=True, text=True).stdout
+    try: return subprocess.run(['tail', '-n', '30', f'{SERVER_PATH}/server_console.log'], capture_output=True, text=True).stdout
     except: return 'Erro ao ler log'
 
 @app.route('/')
 def index():
     if not session.get('login'): return '''
-    <form method=post action=/login>
-    User:<input name=u>
-    Pass:<input type=password name=p>
+    <center>
+    <form method=post action=/login style="margin-top:100px">
+    User:<input name=u><br>
+    Pass:<input type=password name=p><br>
     <button>Login</button>
+    </form>
+    </center>
     '''
     
     log_content = get_log()
     return f'''
+    <center>
+    <div style="width:600px;margin-top:50px">
     <h3>Server: {"ON" if status() else "OFF"} | Players: 0/60</h3>
     <form method=post action=/cmd>
     <button name=c value=start>Start</button>
@@ -45,8 +50,10 @@ def index():
     <button name=c value=update>Update</button>
     </form>
     <h4>Console:</h4>
-    <pre style="background:#000;color:#0f0;padding:10px;height:300px;overflow:auto">{log_content}</pre>
+    <pre style="background:#000;color:#0f0;padding:10px;height:200px;overflow:auto">{log_content}</pre>
     <a href=/files>Files</a> | <a href=/logout>Logout</a>
+    </div>
+    </center>
     <script>setTimeout(()=>location.reload(),2000)</script>
     '''
 
@@ -70,7 +77,7 @@ def cmd():
 def files():
     if not session.get('login'): return redirect('/')
     links = ''.join([f'<div><a href=/edit?f={name}>{name}</a></div>' for name in FILES])
-    return f'{links}<a href=/>Back</a>'
+    return f'<center><div style="width:600px;margin-top:50px">{links}<br><a href=/>Back</a></div></center>'
 
 @app.route('/edit')
 def edit():
@@ -80,12 +87,16 @@ def edit():
     try: content = open(FILES[f], 'r').read()
     except: content = 'Error'
     return f'''
+    <center>
+    <div style="width:800px;margin-top:50px">
     <form method=post action=/save>
     <input type=hidden name=f value={f}>
     <textarea name=c style="width:100%;height:300px">{content}</textarea>
     <br><button>Save</button>
     </form>
     <a href=/files>Back</a>
+    </div>
+    </center>
     '''
 
 @app.route('/save', methods=['POST'])
