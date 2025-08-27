@@ -6,8 +6,8 @@ app = Flask(__name__)
 app.secret_key = 'secret'
 
 SERVER_PATH = "/home/dayz/servers/teste"
-USERNAME = "2302"
-PASSWORD = "@12345"
+USERNAME = os.getenv('USER01')
+PASSWORD = os.getenv('PASS01')
 FILES = ['serverDZ.cfg', 'basic.cfg', 'types.xml']
 
 def status():
@@ -94,3 +94,4 @@ def save():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
+
