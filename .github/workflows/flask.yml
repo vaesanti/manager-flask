@@ -33,6 +33,9 @@ jobs:
           ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
 
       - name: Iniciar Flask + ngrok
+        env:
+            USER01: ${{ secrets.USER01 }}
+            PASS01: ${{ secrets.PASS01 }}
         run: |
           nohup python app.py > server.log 2>&1 &
           nohup ngrok http 5000 > ngrok.log 2>&1 &
