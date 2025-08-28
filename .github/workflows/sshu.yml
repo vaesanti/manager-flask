@@ -37,3 +37,7 @@ jobs:
           ./ngrok tcp 22 &
           sleep 10
           curl -s http://localhost:4040/api/tunnels | jq '.tunnels[0].public_url'
+      - name: Manter job ativo por 6h
+        run: |
+          echo "Servidor ativo por até 6 horas..."
+          sleep 21600   # 6 horas em segundos
