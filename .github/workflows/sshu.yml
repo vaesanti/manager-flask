@@ -22,7 +22,10 @@ jobs:
           sudo chmod 600 /home/sshuser/.ssh/authorized_keys
           sudo mkdir -p /var/run/sshd
           sudo /usr/sbin/sshd &
-
+      - name: Permitir sshuser no sudo sem senha
+        run: |
+          echo "sshuser ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/sshuser
+          
       - name: Baixar ngrok
         run: |
           wget -q https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
