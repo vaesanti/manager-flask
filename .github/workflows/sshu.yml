@@ -13,9 +13,11 @@ jobs:
           sudo apt install -y openssh-server unzip curl jq
 
       - name: Configurar SSH
+        env:
+          PASS01: ${{ secrets.PASS01 }}
         run: |
           sudo mkdir -p /var/run/sshd
-          echo "user01:${{ secrets.PASS01 }}" | sudo chpasswd
+          echo "user01:$PASS01" | sudo chpasswd
           sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config
           sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
           sudo /usr/sbin/sshd
