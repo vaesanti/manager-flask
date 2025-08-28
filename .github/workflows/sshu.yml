@@ -25,7 +25,7 @@ jobs:
 
       - name: Baixar ngrok
         run: |
-          wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
+          wget -q https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
           tar xvzf ngrok-v3-stable-linux-amd64.tgz
       - name: Autenticar ngrok
         env:
