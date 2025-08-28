@@ -1,4 +1,4 @@
-name: Ubuntu SSH via ngrok
+name: SSH via ngrok
 
 on:
   workflow_dispatch:
@@ -10,17 +10,18 @@ jobs:
       - name: Instalar dependências
         run: |
           sudo apt update
-          sudo apt install -y openssh-server unzip curl jq
+          sudo apt install -y openssh-server unzip curl
 
-      - name: Configurar SSH
-        env:
-          PASS01: ${{ secrets.PASS01 }}
+      - name: Criar usuário SSH
         run: |
+          sudo useradd -m -s /bin/bash sshuser
+          sudo mkdir -p /home/sshuser/.ssh
+          echo "${{ secrets.SSH_PUBLIC_KEY }}" | sudo tee /home/sshuser/.ssh/authorized_keys
+          sudo chown -R sshuser:sshuser /home/sshuser/.ssh
+          sudo chmod 700 /home/sshuser/.ssh
+          sudo chmod 600 /home/sshuser/.ssh/authorized_keys
           sudo mkdir -p /var/run/sshd
-          echo "user01:$PASS01" | sudo chpasswd
-          sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config
-          sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
-          sudo /usr/sbin/sshd
+          sudo /usr/sbin/sshd &
 
       - name: Baixar ngrok
         run: |
@@ -30,14 +31,10 @@ jobs:
       - name: Autenticar ngrok
         env:
           NGROK_TOKEN: ${{ secrets.NGROK_TOKEN }}
-        run: |
-          ./ngrok authtoken $NGROK_TOKEN
+        run: ./ngrok authtoken $NGROK_TOKEN
 
       - name: Expor SSH com ngrok
         run: |
-          ./ngrok tcp 22 --log=stdout &
+          ./ngrok tcp 22 &
           sleep 10
-          PUBLIC_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
-          echo "Conecte-se ao servidor SSH usando: ssh ubuntu@${PUBLIC_URL#tcp://}"
-          # Mantém o job ativo por um período (exemplo: 1 hora)
-          timeout 3600 tail -f /dev/null
+          curl -s http://localhost:4040/api/tunnels | jq '.tunnels[0].public_url'
