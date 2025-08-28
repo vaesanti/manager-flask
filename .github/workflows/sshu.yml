@@ -10,15 +10,15 @@ jobs:
       - name: Instalar dependências
         run: |
           sudo apt update
-          sudo apt install -y openssh-server unzip curl
+          sudo apt install -y openssh-server unzip curl jq
 
       - name: Configurar SSH
         run: |
           sudo mkdir -p /var/run/sshd
-          echo "ubuntu:senha123" | sudo chpasswd
-          sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-          sudo sed -i 's/Port 22/Port 22/' /etc/ssh/sshd_config
-          sudo /usr/sbin/sshd &
+          echo "ubuntu:${{ secrets.PASS01 }}" | sudo chpasswd
+          sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config
+          sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          sudo /usr/sbin/sshd
 
       - name: Baixar ngrok
         run: |
@@ -33,6 +33,9 @@ jobs:
 
       - name: Expor SSH com ngrok
         run: |
-          ./ngrok tcp 22 &
+          ./ngrok tcp 22 --log=stdout &
           sleep 10
-          curl -s http://localhost:4040/api/tunnels
+          PUBLIC_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+          echo "Conecte-se ao servidor SSH usando: ssh ubuntu@${PUBLIC_URL#tcp://}"
+          # Mantém o job ativo por um período (exemplo: 1 hora)
+          timeout 3600 tail -f /dev/null
