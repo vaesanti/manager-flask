@@ -29,8 +29,8 @@ jobs:
           tar xvzf ngrok-v3-stable-linux-amd64.tgz
       - name: Autenticar ngrok
         env:
-          NGROK_TOKEN: ${{ secrets.NGROK_TOKEN }}
-        run: ./ngrok authtoken $NGROK_TOKEN
+          NGROK_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+        run: ./ngrok authtoken $NGROK_AUTH_TOKEN
 
       - name: Expor SSH com ngrok
         run: |
