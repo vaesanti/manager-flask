@@ -10,7 +10,7 @@ jobs:
       - name: Instalar dependências
         run: |
           sudo apt update
-          sudo apt install -y openssh-server unzip curl
+          sudo apt install -y openssh-server unzip curl tar wget
 
       - name: Criar usuário SSH
         run: |
@@ -25,9 +25,8 @@ jobs:
 
       - name: Baixar ngrok
         run: |
-          curl -s https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip -o ngrok.zip
-          unzip ngrok.zip
-
+          wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz
+          tar xvzf ngrok-v3-stable-linux-amd64.tgz
       - name: Autenticar ngrok
         env:
           NGROK_TOKEN: ${{ secrets.NGROK_TOKEN }}
